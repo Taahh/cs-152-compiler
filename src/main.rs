@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::{env, fs, process};
 use std::num::ParseIntError;
 
 mod interpreter;
@@ -190,13 +190,16 @@ fn main() {
         }
         else {
             let test_if_num = s.parse::<i32>();
-            match test_if_num {
+            return match test_if_num {
                 Ok(num) => {
-                    return Token::Num(num);
+                    Token::Num(num)
                 }
                 Err(_) => {
-                    println!("String: {}", s);
-                    return Token::Ident(s);
+                    if (s.as_bytes()[0].is_ascii_digit()) {
+                        eprintln!("Incorrect identifier! {}", s);
+                        process::exit(1);
+                    }
+                    Token::Ident(s)
                 }
             }
         }
