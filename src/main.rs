@@ -3,7 +3,7 @@ use std::num::ParseIntError;
 
 mod interpreter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum Token {
     NotToken,
     Plus,
@@ -102,6 +102,7 @@ fn main() {
                     {
                         if (word_buffer.len() > 0) {
                             word_buffer = word_buffer.to_lowercase();
+
                             token_types.push(parse(word_buffer.clone()));
 
                             tokens.push(word_buffer.clone());
@@ -118,6 +119,7 @@ fn main() {
                             // if token != Token::NotToken {
                             //     token_types.push(token);
                             // }
+
                             word_buffer.push(ch);
                         }
                     }
@@ -127,68 +129,44 @@ fn main() {
         }
     }
 
-    fn parse(s: String) -> Token {
-        let mut arr: Vec<Token> = vec![];
-        if (s.eq("+")) {
-            return Token::Plus;
-        } else if (s.eq("-")) {
-            return Token::Subtract;
-        } else if (s.eq("*")) {
-            return Token::Multiply;
-        } else if (s.eq("/")) {
-            return Token::Divide;
-        } else if (s.eq("%")) {
-            return Token::Modulus;
-        } else if (s.eq("=")) {
-            return Token::Assign;
-        } else if (s.eq("if")) {
-            return Token::If;
-        }  else if (s.eq("else")) {
-            return Token::Else;
-        } else if (s.eq("while")) {
-            return Token::While;
-        }  else if (s.eq("break")) {
-            return Token::Break;
-        } else if (s.eq("read")) {
-            return Token::Read;
-        } else if (s.eq("func")) {
-            return Token::Func;
-        } else if (s.eq("return")) {
-            return Token::Return;
-        } else if (s.eq("int")) {
-            return Token::Int;
-        } else if (s.eq("(")) {
-            return Token::OpenParentheses;
-        }  else if (s.eq(")")) {
-            return Token::ClosingParentheses;
-        }  else if (s.eq("{")) {
-            return Token::OpeningBrace;
-        }  else if (s.eq("}")) {
-            return Token::ClosingBrace;
-        }  else if (s.eq("[")) {
-            return Token::OpeningBracket;
-        }  else if (s.eq("]")) {
-            return Token::ClosingBracket;
-        }  else if (s.eq(",")) {
-            return Token::Comma;
-        }   else if (s.eq(";")) {
-            return Token::SemiColon;
-        }  else if (s.eq("==")) {
-            return Token::Equality;
-        }  else if (s.eq("!=")) {
-            return Token::NotEqual;
-        } else if (s.eq("print")) {
-            return Token::Print;
-        }  else if (s.eq(">")) {
-            return Token::GreaterThan;
-        }  else if (s.eq("<")) {
-            return Token::LessThan;
-        }  else if (s.eq(">=")) {
-            return Token::GreaterThanEqual;
-        }  else if (s.eq("<=")) {
-            return Token::LessThanEqual;
+    fn parse_symbols(s: String) -> Token {
+        return match s.as_str() {
+            "+" => Token::Plus,
+            "-" => Token::Subtract,
+            "*" => Token::Multiply,
+            "/" => Token::Divide,
+            "%" => Token::Modulus,
+            "=" => Token::Assign,
+            "if" => Token::If,
+            "else" => Token::Else,
+            "while" => Token::While,
+            "break" => Token::Break,
+            "read" => Token::Read,
+            "func" => Token::Func,
+            "return" => Token::Return,
+            "int" => Token::Int,
+            "(" => Token::OpenParentheses,
+            ")" => Token::ClosingParentheses,
+            "{" => Token::OpeningBrace,
+            "}" => Token::ClosingBrace,
+            "[" => Token::OpeningBracket,
+            "]" => Token::ClosingBracket,
+            "," => Token::Comma,
+            ";" => Token::SemiColon,
+            "==" => Token::Equality,
+            "!=" => Token::NotEqual,
+            "print" => Token::Print,
+            ">" => Token::GreaterThan,
+            "<" => Token::LessThan,
+            ">=" => Token::GreaterThanEqual,
+            "<=" => Token::LessThanEqual,
+            _ => Token::NotToken,
         }
-        else {
+    }
+
+    fn parse(s: String) -> Token {
+        let token = parse_symbols(s.clone());
+        if token == Token::NotToken {
             let test_if_num = s.parse::<i32>();
             return match test_if_num {
                 Ok(num) => {
@@ -204,7 +182,7 @@ fn main() {
             }
         }
 
-        return Token::NotToken;
+        return token;
     }
     // output
     println!("{:?}", tokens);
