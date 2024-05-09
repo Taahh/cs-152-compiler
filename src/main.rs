@@ -213,6 +213,36 @@ fn main() {
         }
     }
 
+    fn parse_variable_assignment(tokens: &Vec<String>, i: &mut usize)
+    {
+        if !matches!(parse(tokens[*i].clone()), Token::Ident(String)) && !matches!(parse(tokens[*i].clone()), Token::Num(i32)) {
+            eprintln!("Error : Expected an identifier for the variable declaration.");
+            process::exit(1);
+        } else {
+            println!("{}, {}", *i, tokens[*i].clone());
+            // its an identifier, now move on to the next token
+            *i += 1;
+            if matches!(parse(tokens[*i].clone()) , Token::SemiColon) { // is it a ; ?
+                // println!("{}, {}", *i, tokens[*i].clone());
+                return; // ok, exit
+            } else { // no? then it should be an operator
+                match parse(tokens[*i].clone()) {
+                    Token::Plus => {}
+                    Token::Subtract => {}
+                    Token::Multiply => {}
+                    Token::Divide => {}
+                    Token::Modulus => {}
+                    _ => {
+                        eprintln!("Error : Expected an arithmetic operation or semicolon for the variable declaration.");
+                        process::exit(1);
+                    }
+                };
+            }
+        }
+        println!("{}, {}", *i, tokens[*i].clone());
+        *i += 1;
+    }
+
     fn parse_expr_content(tokens: &Vec<String>, i: &mut usize)
     {
         if !matches!(parse(tokens[*i].clone()), Token::Assign) {
@@ -225,42 +255,12 @@ fn main() {
         } else { //token is equal to assignment(=), now handle right hand side
             println!("{}, {}", *i, tokens[*i].clone());
             *i += 1;
+            let had_expression = false;
+
+            parse_variable_assignment(tokens, i);
+
             while !matches!(parse(tokens[*i].clone()) , Token::SemiColon) {
-                if !matches!(parse(tokens[*i].clone()), Token::Ident(String)) && !matches!(parse(tokens[*i].clone()), Token::Num(i32)) {
-                    eprintln!("Error : Expected an identifier for the variable declaration.");
-                    process::exit(1);
-                } else {
-                    println!("{}, {}", *i, tokens[*i].clone());
-                    // its an identifier, now move on to the next token
-                    *i += 1;
-                    if matches!(parse(tokens[*i].clone()) , Token::SemiColon) { // is it a ; ?
-                        // println!("{}, {}", *i, tokens[*i].clone());
-                        return; // ok, exit
-                    } else { // no? then it should be an operator
-                        /*
-                        ">" => Token::GreaterThan,
-                        "<" => Token::LessThan,
-                        ">=" => Token::GreaterThanEqual,
-                        "<=" => Token::LessThanEqual,
-                        "+" => Token::Plus,
-                        "-" => Token::Subtract,
-                        "*" => Token::Multiply,
-                        "/" => Token::Divide,
-                        "%" => Token::Modulus,
-                        "=" => Token::Assign,
-                        */
-                        match parse(tokens[*i].clone()) {
-                            Token::Plus => {}
-                            Token::Subtract => {}
-                            Token::Multiply => {}
-                            Token::Divide => {}
-                            Token::Modulus => {}
-                            _ => {}
-                        };
-                    }
-                }
-                println!("{}, {}", *i, tokens[*i].clone());
-                *i += 1;
+                parse_variable_assignment(tokens, i);
             }
         }
     }
