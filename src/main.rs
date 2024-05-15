@@ -7,7 +7,7 @@ mod token;
 mod parser;
 
 fn main() {
-    let filename = "examples/function.tt";
+    let filename = "examples/nested_loop.tt";
     let result = fs::read_to_string(filename);
     let code = match result {
         Err(error) => {
@@ -24,8 +24,17 @@ fn main() {
     let mut word_buffer = String::new();
     let mut tokens: Vec<Token> = vec![];
 
+    let mut is_comment = false;
     for x in code.chars() {
-        if word_breaks.contains(&x) {
+        if x == '#' {
+            is_comment = true;
+        }
+        if is_comment && x == '\n' {
+            is_comment = false;
+            word_buffer.clear();
+            continue;
+        }
+        if !is_comment && word_breaks.contains(&x) {
             word_buffer = word_buffer.trim().to_string();
             if !word_buffer.is_empty() {
                 let token = parse_token(&word_buffer);
@@ -43,5 +52,5 @@ fn main() {
 
     println!("Tokens: {:?}", tokens);
 
-    parse_tokens(&tokens);
+    unsafe { parse_tokens(&tokens); }
 }
