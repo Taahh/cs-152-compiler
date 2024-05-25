@@ -1,4 +1,5 @@
 use std::process;
+use std::fmt;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Token {
@@ -34,6 +35,16 @@ pub enum Token {
     LessThanEqual,
     Equality,
     NotEqual,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Token::Ident(ref String) => write!(f, "{}" ,String),
+            Token::Num(ref num) => write!(f, "{}", num),
+            _ => write!(f, "{:?}", self),
+        }
+    }
 }
 
 pub fn parse_word_ending(character: char) -> Token {

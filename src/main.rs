@@ -1,13 +1,28 @@
 use std::collections::HashSet;
 use std::fs;
+use std::env;
 use crate::parser::parse_tokens;
 use crate::token::{parse_token, parse_word_ending, Token};
 
 mod token;
 mod parser;
+mod interpreter;
 
 fn main() {
-    let filename = "examples/nested_loop.tt";
+    // get commandline arguments.
+    let args: Vec<String> = env::args().collect();
+    if args.len() == 1 {
+        println!("Please provide an input file.");
+        return;
+    }
+
+    if args.len() > 2 {
+        println!("Too many commandline arguments.");
+        return;
+    }
+
+    // read the entire file.
+    let filename = &args[1];
     let result = fs::read_to_string(filename);
     let code = match result {
         Err(error) => {
@@ -37,7 +52,7 @@ fn main() {
         if !is_comment && word_breaks.contains(&x) {
             word_buffer = word_buffer.trim().to_string();
             if !word_buffer.is_empty() {
-                let token = parse_token(&word_buffer);
+                let token = parse_token(&word_buffer.clone());
                 tokens.push(token);
             }
             if x != ' ' {
@@ -52,5 +67,8 @@ fn main() {
 
     println!("Tokens: {:?}", tokens);
 
-    unsafe { parse_tokens(&tokens); }
+    unsafe {
+        let code = parse_tokens(&tokens);
+        interpreter::execute_ir(&code);
+    }
 }
