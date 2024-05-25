@@ -69,6 +69,7 @@ fn main() {
 
     unsafe {
         let code = parse_tokens(&tokens);
+        println!("{}", code);
         interpreter::execute_ir(&code);
     }
 }

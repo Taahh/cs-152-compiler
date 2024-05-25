@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::fmt::format;
 use std::process;
 
 use crate::token::Token;
+
 static mut IR_CODE: String = String::new();
 static mut VARIABLE_STACK: Vec<String> = vec![];
-static mut VAR_NUM: i64 = 0;
+static mut VAR_NUM: i64 = 1;
 static mut PRINTING: bool = false;
 
 pub fn handle_function(tokens: &Vec<Token>, i: &mut usize) {
@@ -289,7 +290,7 @@ fn arithmetic_or_comparison(tokens: &Vec<Token>, i: &mut usize) -> String {
     return match token {
         Token::Plus => "%add".to_string(),
         Token::Subtract => "%sub".to_string(),
-        Token::Multiply => "%mul".to_string(),
+        Token::Multiply => "%mult".to_string(),
         Token::Divide => "%div".to_string(),
         Token::Modulus => "%mod".to_string(),
         Token::Equality => "%eq".to_string(),
@@ -328,7 +329,8 @@ fn handle_array_size(tokens: &Vec<Token>, i: &mut usize) -> i32 {
 
 fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: Token) {
     let mut balanced_parentheses: Vec<&Token> = vec![];
-    let mut operations_performed: Vec<String> = vec![];
+    let mut last_temp: String = "".to_string();
+    let mut last_operation: String = "".to_string();
     while tokens[*i] != end_token { // go until end of return statement
         // //println!("hellooo");
         if matches!(tokens[*i], Token::OpenParentheses) {
@@ -362,11 +364,22 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
             }
         }
         if tokens[*i] == end_token {
-            unsafe {
-                if PRINTING {
-                    IR_CODE.push_str(&format!("%out {}\n", ident1.0));
-                } else {
-                    IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], ident1.0));
+            if last_temp.is_empty() {
+                unsafe {
+                    if PRINTING {
+                        IR_CODE.push_str(&format!("%out {}\n", ident1.0));
+                    } else {
+                        IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], ident1.0));
+                    }
+                    return;
+                }
+            } else {
+                unsafe {
+                    let new_temp = format!("_temp{}", VAR_NUM);
+                    IR_CODE.push_str(&format!("%int {}\n", new_temp));
+                    VAR_NUM += 1;
+                    IR_CODE.push_str(&format!("{} {}, {}, {}\n", last_operation, new_temp, last_temp, ident1.0));
+                    last_temp = new_temp;
                 }
             }
             break;
@@ -397,7 +410,13 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
             }
         }
         if tokens[*i] == end_token {
-            unsafe { IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, VARIABLE_STACK[VARIABLE_STACK.len() - 1], ident1.0, ident2.0)); }
+            unsafe {
+                last_temp = format!("_temp{}", VAR_NUM);
+                IR_CODE.push_str(&format!("%int {}\n", last_temp));
+                IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, ident1.0, ident2.0));
+                VAR_NUM += 1;
+            }
+
             break;
         } else {
             if matches!(tokens[*i], Token::ClosingParentheses) {
@@ -405,9 +424,20 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
                 //println!("{:?}", tokens[*i]);
                 *i += 1;
             }
-            arithmetic_or_comparison(tokens, i);
+            unsafe {
+                last_temp = format!("_temp{}", VAR_NUM);
+                IR_CODE.push_str(&format!("%int {}\n", last_temp));
+                IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, ident1.0, ident2.0));
+                VAR_NUM += 1;
+            }
+            last_operation = arithmetic_or_comparison(tokens, i);
         }
     }
+
+    unsafe {
+        IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], last_temp));
+    }
+
 }
 
 fn handle_declaration(tokens: &Vec<Token>, i: &mut usize) {
@@ -489,6 +519,10 @@ fn handle(tokens: &Vec<Token>, i: &mut usize) {
             }
 
             handle_declaration_contents(tokens, i, Token::ClosingParentheses);
+
+            unsafe {
+                PRINTING = false;
+            }
             //println!("{:?}", tokens[*i]);
             *i += 1;
 
