@@ -367,7 +367,15 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
             if last_temp.is_empty() {
                 unsafe {
                     if PRINTING {
-                        IR_CODE.push_str(&format!("%out {}\n", ident1.0));
+                        let mut identifier = format!("{}", ident1.0);
+                        if ident1.1 != -1 {
+                            identifier = format!("_temp{}", VAR_NUM);
+                            IR_CODE.push_str(&format!("%int {}\n", identifier));
+                            IR_CODE.push_str(&format!("%mov {}, [{} + {}]\n", identifier, ident1.0, ident1.1));
+
+                            VAR_NUM += 1;
+                        }
+                        IR_CODE.push_str(&format!("%out {}\n", identifier));
                     } else {
                         IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], ident1.0));
                     }
@@ -410,10 +418,29 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
             }
         }
         if tokens[*i] == end_token {
+
             unsafe {
+                let mut identifier = format!("{}", ident1.0);
+                let mut identifier2 = format!("{}", ident2.0);
+                if ident1.1 != -1 {
+                    identifier = format!("_temp{}", VAR_NUM);
+                    IR_CODE.push_str(&format!("%int {}\n", identifier));
+                    IR_CODE.push_str(&format!("%mov {}, [{} + {}]\n", identifier, ident1.0, ident1.1));
+
+                    VAR_NUM += 1;
+                }
+
+                if ident2.1 != -1 {
+                    identifier2 = format!("_temp{}", VAR_NUM);
+                    IR_CODE.push_str(&format!("%int {}\n", identifier2));
+                    IR_CODE.push_str(&format!("%mov {}, [{} + {}]\n", identifier2, ident2.0, ident2.1));
+
+                    VAR_NUM += 1;
+                }
+
                 last_temp = format!("_temp{}", VAR_NUM);
                 IR_CODE.push_str(&format!("%int {}\n", last_temp));
-                IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, ident1.0, ident2.0));
+                IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, identifier, identifier2));
                 VAR_NUM += 1;
             }
 
@@ -425,9 +452,28 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
                 *i += 1;
             }
             unsafe {
+
+                let mut identifier = format!("{}", ident1.0);
+                let mut identifier2 = format!("{}", ident2.0);
+                if ident1.1 != -1 {
+                    identifier = format!("_temp{}", VAR_NUM);
+                    IR_CODE.push_str(&format!("%int {}\n", identifier));
+                    IR_CODE.push_str(&format!("%mov {}, [{} + {}]\n", identifier, ident1.0, ident1.1));
+
+                    VAR_NUM += 1;
+                }
+
+                if ident2.1 != -1 {
+                    identifier2 = format!("_temp{}", VAR_NUM);
+                    IR_CODE.push_str(&format!("%int {}\n", identifier2));
+                    IR_CODE.push_str(&format!("%mov {}, [{} + {}]\n", identifier2, ident2.0, ident2.1));
+
+                    VAR_NUM += 1;
+                }
+
                 last_temp = format!("_temp{}", VAR_NUM);
                 IR_CODE.push_str(&format!("%int {}\n", last_temp));
-                IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, ident1.0, ident2.0));
+                IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, identifier, identifier2));
                 VAR_NUM += 1;
             }
             last_operation = arithmetic_or_comparison(tokens, i);
