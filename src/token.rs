@@ -42,6 +42,17 @@ impl fmt::Display for Token {
         match self {
             Token::Ident(ref String) => write!(f, "{}" ,String),
             Token::Num(ref num) => write!(f, "{}", num),
+            Token::GreaterThan => write!(f, ">"),
+            Token::LessThan => write!(f, "<"),
+            Token::GreaterThanEqual => write!(f, ">="),
+            Token::LessThanEqual => write!(f, "<="),
+            Token::Equality => write!(f, "=="),
+            Token::NotEqual => write!(f, "!="),
+            Token::Plus => write!(f, "+"),
+            Token::Subtract => write!(f, "-"),
+            Token::Multiply => write!(f, "*"),
+            Token::Divide => write!(f, "/"),
+            Token::Modulus => write!(f, "%"),
             _ => write!(f, "{:?}", self),
         }
     }

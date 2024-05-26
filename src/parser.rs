@@ -350,25 +350,41 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
         }
         let ident1 = identifier_or_number(tokens, i);
         let mut function = false;
+        let mut function_call = format!("{}(", ident1.0);
 
         if matches!(&tokens[*i-1], Token::Ident(String)) {
             if matches!(&tokens[*i], Token::OpenParentheses) { // function call
                 //println!("{:?}", tokens[*i]);
                 *i += 1;
+                let mut adding_more = false;
                 while !matches!(&tokens[*i], Token::ClosingParentheses) {
-                    identifier_or_number(tokens, i);
+                    if adding_more {
+                        arithmetic_or_comparison(tokens, i);
+                        function_call.push_str(&format!("{}", tokens[*i-1]));
+                    }
+                    let fun_iden = identifier_or_number(tokens, i);
                     if matches!(&tokens[*i], Token::ClosingParentheses) {
+                        function_call.push_str(&format!("{}", fun_iden.0));
                         break;
                     } else if matches!(&tokens[*i], Token::Comma) {
-                        //println!("{:?}", tokens[*i]);
+                        function_call.push_str(&format!("{}", fun_iden.0));
+                        function_call.push_str(", ");
                         *i += 1;
                         continue;
                     } else {
-                        arithmetic_or_comparison(tokens, i);
-                        identifier_or_number(tokens, i);
+                        let temp = create_temp();
+                        let operation = arithmetic_or_comparison(tokens, i);
+                        let iden = identifier_or_number(tokens, i);
+                        unsafe {
+                            IR_CODE.push_str(&format!("{} {}, {}, {}\n", operation, temp, fun_iden.0, iden.0));
+                        }
+                        function_call.push_str(&format!("{}", temp));
+                        adding_more = true;
                     }
                 }
+                function_call.push_str(", )");
                 function = true;
+                println!("{}", function_call);
                 //println!("{:?}", tokens[*i]);
                 *i += 1;
             }
@@ -387,7 +403,13 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
                         }
                         IR_CODE.push_str(&format!("%out {}\n", identifier));
                     } else {
-                        IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], ident1.0));
+                        if function {
+                            let temp = create_temp();
+                            IR_CODE.push_str(&format!("%call {}, {}\n", temp, function_call));
+                            IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], temp));
+                        } else {
+                            IR_CODE.push_str(&format!("%mov {}, {}\n", VARIABLE_STACK[VARIABLE_STACK.len() - 1], ident1.0));
+                        }
                     }
                     return;
                 }
