@@ -86,11 +86,12 @@ pub fn handle_function(tokens: &Vec<Token>, i: &mut usize) {
                 process::exit(1);
             }
             *i += 1;
-            unsafe {
-                IR_CODE.push_str(&format!("%int _temp{}\n", VAR_NUM));
-                VAR_NUM += 1;
-            }
+            let return_var = create_temp();
+            unsafe { VARIABLE_STACK.push(return_var.clone()); }
             handle_declaration_contents(tokens, i, Token::SemiColon);
+             unsafe {
+                 IR_CODE.push_str(&format!("%ret {}\n", return_var));
+             }
             if !matches!(&tokens[*i], Token::SemiColon) {
                 eprintln!("Expected ';' after return statement");
                 process::exit(1);
@@ -109,6 +110,15 @@ pub fn handle_function(tokens: &Vec<Token>, i: &mut usize) {
     }
     //println!("{:?}", tokens[*i]);
     *i += 1;
+}
+
+fn create_temp() -> String {
+    unsafe {
+        let identifer = format!("_temp{}", VAR_NUM);
+        IR_CODE.push_str(&format!("%int {}\n", identifer));
+        VAR_NUM += 1;
+        return identifer;
+    }
 }
 
 fn handle_condition(tokens: &Vec<Token>, i: &mut usize) {
