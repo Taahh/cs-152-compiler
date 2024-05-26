@@ -290,6 +290,7 @@ fn arithmetic_or_comparison(tokens: &Vec<Token>, i: &mut usize) -> String {
         && !matches!(&tokens[*i], Token::GreaterThanEqual)
         && !matches!(&tokens[*i], Token::GreaterThan)
     {
+        println!("{:?}", tokens[*i]);
         eprintln!("Expected '+, -, /, *, ==, !=, <=, <, >=, >=' when performing arithmetic operations or comparing multiple identifiers / numbers");
         process::exit(1);
     }
@@ -341,14 +342,30 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
     let mut balanced_parentheses: Vec<&Token> = vec![];
     let mut last_temp: String = "".to_string();
     let mut last_operation: String = "".to_string();
+    let mut ident1;
     while tokens[*i] != end_token { // go until end of return statement
         // //println!("hellooo");
         if matches!(tokens[*i], Token::OpenParentheses) {
             balanced_parentheses.push(&tokens[*i]);
             //println!("{:?}", tokens[*i]);
             *i += 1;
+            ident1 = identifier_or_number(tokens, i);
+            while !matches!(&tokens[*i], Token::ClosingParentheses) {
+                unsafe {
+                    let op = arithmetic_or_comparison(tokens, i);
+                    let ident2 = identifier_or_number(tokens, i);
+                    let temp = format!("_temp{}", VAR_NUM);
+                    IR_CODE.push_str(&format!("%int {}\n", temp));
+                    IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, temp, ident1.0, ident2.0));
+                    ident1.0 = Token::Ident(temp);
+                    VAR_NUM += 1;
+                }
+            }
+            balanced_parentheses.pop();
+            *i += 1;
+        } else {
+            ident1 = identifier_or_number(tokens, i);
         }
-        let ident1 = identifier_or_number(tokens, i);
         let mut function = false;
         let mut function_call = format!("{}(", ident1.0);
 
