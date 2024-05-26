@@ -394,7 +394,7 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
         }
 
         let op = arithmetic_or_comparison(tokens, i);
-        let ident2 = identifier_or_number(tokens, i);
+        let mut ident2 = identifier_or_number(tokens, i);
 
         if matches!(&tokens[*i-1], Token::Ident(String)) {
             if matches!(&tokens[*i], Token::OpenParentheses) { // function call
@@ -452,7 +452,20 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
                 *i += 1;
             }
             unsafe {
+                // we have to parse the expression here and then return it into ident2
+                    let mut breaknow = 0;
+                while tokens[*i] != Token::SemiColon {
+                    let mut dumy_ident = format!("_temp{}", VAR_NUM);
 
+                    // first expr is ident2.0
+                    let opr = arithmetic_or_comparison(tokens, i);
+                    let ident3 = identifier_or_number(tokens, i);
+                    IR_CODE.push_str(&format!("%int {}\n", dumy_ident));
+                    IR_CODE.push_str(&format!("{} {}, {}, {}\n", opr, dumy_ident, ident2.0, ident3.0));
+                    ident2.0 = Token::Ident(dumy_ident);
+                    VAR_NUM += 1;
+                    breaknow = 1; // we need to break if we do this.
+                }
                 let mut identifier = format!("{}", ident1.0);
                 let mut identifier2 = format!("{}", ident2.0);
                 if ident1.1 != -1 {
@@ -475,6 +488,7 @@ fn handle_declaration_contents(tokens: &Vec<Token>, i: &mut usize, end_token: To
                 IR_CODE.push_str(&format!("%int {}\n", last_temp));
                 IR_CODE.push_str(&format!("{} {}, {}, {}\n", op, last_temp, identifier, identifier2));
                 VAR_NUM += 1;
+                if breaknow == 1 {break;}
             }
             last_operation = arithmetic_or_comparison(tokens, i);
         }
