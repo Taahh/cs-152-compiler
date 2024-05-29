@@ -78,9 +78,12 @@ fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> S
         process::exit(1);
     }
 
+    let mut scope_stack: Vec<&mut Scope> = vec![&mut scope];
     // Parse Method Body
     while !check_peek(iterator, Token::Return) && !check_peek(iterator, Token::ClosingBrace) {
-        ir_code += &parse(Some(&mut scope), context, iterator); // Parse anything
+        let scopes_n = scope_stack.len();
+        let scope_stack = &mut scope_stack[scopes_n - 1]; // Yeah idk where i was going with this
+        ir_code += &parse(Some(*scope_stack), context, iterator); // Parse anything
     }
     match next_result(iterator) {
         Token::Return => {
