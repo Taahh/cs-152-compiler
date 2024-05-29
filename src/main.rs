@@ -10,7 +10,10 @@ mod interpreter;
 
 struct Context {
     temp_val: i64,
-    functions: Vec<String>
+    functions: Vec<String>,
+    loop_val: i64,
+    if_val: i64,
+    loop_stack: Vec<i64>
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -87,6 +90,9 @@ fn main() {
     let mut context = Context {
         temp_val: 1,
         functions: vec![],
+        loop_val: 1,
+        if_val: 1,
+        loop_stack: vec![],
     };
 
 

@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::iter::Peekable;
 use std::process;
 
@@ -8,6 +9,22 @@ fn create_temp(context: &mut Context) -> String {
     let identifier = format!("_temp{}", context.temp_val);
     context.temp_val += 1;
     return identifier;
+}
+
+fn parse_comparison_operator<'a, T>(iterator: &mut Peekable<T>) -> String
+    where T: Iterator<Item=&'a Token> {
+    return match next_result(iterator) {
+        Token::Equality => "%eq",
+        Token::NotEqual => "%neq",
+        Token::GreaterThan => "%gt",
+        Token::LessThan => "%lt",
+        Token::GreaterThanEqual => "%ge",
+        Token::LessThanEqual => "%le",
+        _ => {
+            eprintln!("Expected comparison operator: '==', '!=', '>', '<', '>=', '<=");
+            process::exit(1);
+        }
+    }.to_string();
 }
 
 fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> String
@@ -139,7 +156,7 @@ fn parse_multiplication_expression<'a, T>(scope: &mut Scope, context: &mut Conte
             println!("Finished parsing parentheses");
             term = Expression {
                 code: ir_code.clone(),
-                name: expression.name
+                name: expression.name,
             };
             operands += 1;
         } else {
@@ -298,13 +315,16 @@ fn parse_term<'a, T>(scope: &mut Scope, context: &mut Context, iterator: &mut Pe
     }
 }
 
-fn parse_array_size<'a, T>(iterator: &mut Peekable<T>) -> (bool, i32)
+fn parse_array_size<'a, T>(iterator: &mut Peekable<T>) -> (bool, String)
     where T: Iterator<Item=&'a Token> {
     if check_peek(iterator, Token::OpeningBracket) { // array size!!!
         iterator.next();
         let size = match next_result(iterator) {
             Token::Num(num) => {
-                num
+                format!("{}", num)
+            },
+            Token::Ident(identifier) => {
+                identifier
             },
             _ => {
                 eprintln!("Expected integer size for array");
@@ -317,7 +337,7 @@ fn parse_array_size<'a, T>(iterator: &mut Peekable<T>) -> (bool, i32)
         }
         return (true, size);
     }
-    return (false, -1);
+    return (false, "".to_string());
 }
 
 fn parse<'a, T>(scope: Option<&mut Scope>, context: &mut Context, iterator: &mut Peekable<T>) -> String
@@ -341,14 +361,25 @@ fn parse<'a, T>(scope: Option<&mut Scope>, context: &mut Context, iterator: &mut
                 }
             };
 
-            if is_array.0 && is_array.1 <= 0 {
-                eprintln!("Cannot create an array with size 0 or less");
-                process::exit(1);
+            if is_array.0 {
+                let array_size = is_array.1.parse::<usize>().expect("Expected integer value for initial array size");
+                if array_size <= 0 {
+                    eprintln!("Cannot create an array with size 0 or less");
+                    process::exit(1);
+                }
             }
 
             if scope.as_ref().expect("Variables should be defined within a function").variables.contains(&int_identifier) {
                 eprintln!("The variable '{}' has already been declared", int_identifier);
                 process::exit(1);
+            }
+
+            let mut assigned_expression = None;
+            let curr_scope = scope.expect("Variables should be defined within a function");
+            if check_peek(iterator, Token::Assign) {
+                iterator.next();
+                let expression = parse_expression(curr_scope, context, iterator);
+                assigned_expression = Some(expression);
             }
 
             if !check_next(iterator, Token::SemiColon) {
@@ -357,15 +388,25 @@ fn parse<'a, T>(scope: Option<&mut Scope>, context: &mut Context, iterator: &mut
             }
             if is_array.0 {
                 ir_code += &format!("%int[] {}, {}\n", int_identifier, is_array.1);
+                if assigned_expression.is_some() {
+                    let expr = assigned_expression.unwrap();
+                    ir_code += &expr.code;
+                    ir_code += &format!("%mov [{} + {}], {}\n", int_identifier, is_array.1, expr.name);
+                }
+
             } else {
                 ir_code += &format!("%int {}\n", int_identifier);
+                if assigned_expression.is_some() {
+                    let expr = assigned_expression.unwrap();
+                    ir_code += &expr.code;
+                    ir_code += &format!("%mov {}, {}\n", int_identifier, expr.name);
+                }
             }
 
             println!("Pushing {}", int_identifier);
             // if scope.is_some() {
-                scope.expect("Variables should be defined within a function").variables.push(int_identifier.clone());
+            curr_scope.variables.push(int_identifier.clone());
             // }
-
         }
         Token::Ident(ident) => {
             iterator.next();
@@ -419,6 +460,119 @@ fn parse<'a, T>(scope: Option<&mut Scope>, context: &mut Context, iterator: &mut
             }
             ir_code += &expression.code;
             ir_code += &format!("%out {}\n", expression.name);
+        }
+        Token::While => {
+            iterator.next();
+            ir_code += &format!(":loopbegin{}\n", context.loop_val);
+
+            let curr_scope = scope.unwrap();
+
+            let expr1 = parse_expression(curr_scope, context, iterator);
+            ir_code += &expr1.code;
+            let operator = parse_comparison_operator(iterator);
+            let expr2 = parse_expression(curr_scope, context, iterator);
+            ir_code += &expr2.code;
+
+            let temp = create_temp(context);
+            ir_code += &format!("%int {}\n", temp);
+            ir_code += &format!("{} {}, {}, {}\n", operator, temp, expr1.name, expr2.name);
+            ir_code += &format!("%branch_ifn {}, :endloop{}\n", temp, context.loop_val);
+
+            context.loop_stack.push(context.loop_val);
+
+            if !check_next(iterator, Token::OpeningBrace) {
+                eprintln!("Expected opening curly brace after while condition");
+                process::exit(1);
+            }
+            let loop_val = context.loop_val;
+            context.loop_val += 1;
+
+            while !check_peek(iterator, Token::ClosingBrace) {
+                ir_code += &parse(Some(curr_scope), context, iterator);
+            }
+
+            context.loop_stack.pop();
+            iterator.next();
+            ir_code += &format!("%jmp :loopbegin{}\n", loop_val);
+            ir_code += &format!(":endloop{}\n", loop_val);
+
+        },
+        Token::If => {
+            iterator.next();
+            let curr_scope = scope.unwrap();
+
+            let expr1 = parse_expression(curr_scope, context, iterator);
+            ir_code += &expr1.code;
+            let operator = parse_comparison_operator(iterator);
+            let expr2 = parse_expression(curr_scope, context, iterator);
+            ir_code += &expr2.code;
+
+            let temp = create_temp(context);
+            ir_code += &format!("%int {}\n", temp);
+            ir_code += &format!("{} {}, {}, {}\n", operator, temp, expr1.name, expr2.name);
+            ir_code += &format!("%branch_if {}, :iftrue{}\n", temp, context.if_val);
+
+            if !check_next(iterator, Token::OpeningBrace) {
+                eprintln!("Expected opening curly brace after if condition");
+                process::exit(1);
+            }
+            let if_val = context.if_val;
+            context.if_val += 1;
+
+            let mut if_body = "".to_string();
+            let mut else_body = "".to_string();
+
+            while !check_peek(iterator, Token::ClosingBrace) {
+                if_body += &parse(Some(curr_scope), context, iterator);
+            }
+
+            iterator.next();
+
+            if check_peek(iterator, Token::Else) {
+                iterator.next();
+                if !check_next(iterator, Token::OpeningBrace) {
+                    eprintln!("Expected opening curly brace after else condition");
+                    process::exit(1);
+                }
+                while !check_peek(iterator, Token::ClosingBrace) {
+                    else_body += &parse(Some(curr_scope), context, iterator);
+                }
+
+                iterator.next();
+            }
+
+            if !else_body.is_empty() {
+                ir_code += &format!("%jmp :else{}\n", if_val);
+            } else {
+                ir_code += &format!("%jmp :endif{}\n", if_val);
+            }
+
+            ir_code += &format!(":iftrue{}\n", if_val);
+            ir_code += &if_body;
+            if !else_body.is_empty() {
+                ir_code += &format!("%jmp :endif{}\n", if_val);
+                ir_code += &format!(":else{}\n", if_val);
+                ir_code += &else_body;
+            }
+
+            ir_code += &format!(":endif{}\n", if_val);
+
+        },
+        Token::Break => {
+            iterator.next();
+            if context.loop_stack.is_empty() {
+                eprintln!("Must be breaking out of an ongoing loop!");
+                process::exit(1);
+            }
+            ir_code += &format!("%jmp :endloop{}\n", context.loop_stack[context.loop_stack.len() - 1]);
+        },
+        Token::Continue => {
+            iterator.next();
+            if context.loop_stack.is_empty() {
+                eprintln!("Must be continuing to an ongoing loop!");
+                process::exit(1);
+            }
+            ir_code += &format!("%jmp :loopbegin{}\n", context.loop_stack[context.loop_stack.len() - 1]);
         }
         _ => {
             iterator.next();
