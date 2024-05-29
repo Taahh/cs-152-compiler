@@ -9,13 +9,20 @@ mod parser;
 mod interpreter;
 
 struct Context {
-    temp_val: i64
+    temp_val: i64,
+    functions: Vec<String>
 }
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Scope {
+    variables: Vec<String>
+}
+
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Expression {
     code: String,
-    name: String
+    name: String,
 }
 
 fn main() {
@@ -78,12 +85,12 @@ fn main() {
     println!("Tokens: {:?}", tokens);
 
     let mut context = Context {
-        temp_val: 1
+        temp_val: 1,
+        functions: vec![],
     };
 
-    unsafe {
-        let code = parse_tokens(&mut context, &tokens);
-        println!("{}", code);
-        interpreter::execute_ir(&code);
-    }
+
+    let code = parse_tokens(&mut context, &tokens);
+    println!("{}", code);
+    interpreter::execute_ir(&code);
 }

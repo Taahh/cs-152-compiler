@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::process;
 
-use crate::{Context, Expression};
+use crate::{Context, Expression, Scope};
 use crate::token::Token;
 
 fn create_temp(context: &mut Context) -> String {
@@ -13,6 +13,9 @@ fn create_temp(context: &mut Context) -> String {
 fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> String
     where T: Iterator<Item=&'a Token> {
     let mut ir_code = "".to_string();
+    let mut scope = Scope {
+        variables: vec![],
+    };
 
     let function_identifier = match next_result(iterator) {
         Token::Ident(funcName) => funcName,
@@ -21,6 +24,13 @@ fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> S
             process::exit(1);
         }
     };
+
+    if context.functions.contains(&function_identifier) {
+        eprintln!("The function '{}' has already been defined", function_identifier);
+        process::exit(1);
+    }
+
+    context.functions.push(function_identifier.clone());
 
     ir_code += &format!("%func {}(", function_identifier);
 
@@ -44,6 +54,12 @@ fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> S
             }
         };
 
+        if scope.variables.contains(&parameter_identifier) {
+            eprintln!("Duplicate parameter '{}' was found", parameter_identifier);
+            process::exit(1);
+        }
+        scope.variables.push(parameter_identifier.clone());
+
         ir_code += &format!("%int {}", parameter_identifier);
 
         println!("Found parameter {}", parameter_identifier);
@@ -64,12 +80,12 @@ fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> S
 
     // Parse Method Body
     while !check_peek(iterator, Token::Return) && !check_peek(iterator, Token::ClosingBrace) {
-        ir_code += &parse(context, iterator); // Parse anything
+        ir_code += &parse(Some(&mut scope), context, iterator); // Parse anything
     }
     match next_result(iterator) {
         Token::Return => {
             println!("Got closing statement");
-            let expression = parse_expression(context, iterator);
+            let expression = parse_expression(&mut scope, context, iterator);
             ir_code += &expression.code;
             ir_code += &format!("%ret {}\n", expression.name);
 
@@ -98,7 +114,7 @@ fn parse_function<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> S
 }
 
 
-fn parse_multiplication_expression<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> Expression
+fn parse_multiplication_expression<'a, T>(scope: &mut Scope, context: &mut Context, iterator: &mut Peekable<T>) -> Expression
     where T: Iterator<Item=&'a Token> {
     let mut ir_code = "".to_string();
     let mut temp_name = "".to_string();
@@ -112,7 +128,7 @@ fn parse_multiplication_expression<'a, T>(context: &mut Context, iterator: &mut 
             iterator.next();
             let mut expression = Expression { code: "".to_string(), name: "".to_string() };
             while !check_peek(iterator, Token::ClosingParentheses) {
-                expression = parse_expression(context, iterator);
+                expression = parse_expression(scope, context, iterator);
                 println!("Expression: {}", expression.code);
                 ir_code += &expression.code;
             }
@@ -124,7 +140,7 @@ fn parse_multiplication_expression<'a, T>(context: &mut Context, iterator: &mut 
             };
             operands += 1;
         } else {
-            term = parse_term(context, iterator);
+            term = parse_term(scope, context, iterator);
             operands += 1;
         }
 
@@ -161,9 +177,9 @@ fn parse_multiplication_expression<'a, T>(context: &mut Context, iterator: &mut 
     };
 }
 
-fn parse_expression<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> Expression
+fn parse_expression<'a, T>(scope: &mut Scope, context: &mut Context, iterator: &mut Peekable<T>) -> Expression
     where T: Iterator<Item=&'a Token> {
-    let expression = parse_multiplication_expression(context, iterator);
+    let expression = parse_multiplication_expression(scope, context, iterator);
     let first_temp = &expression.name;
     let mut final_temp = first_temp.clone();
     let mut ir_code = expression.code.clone();
@@ -183,7 +199,7 @@ fn parse_expression<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) ->
             }
         };
 
-        let next_expression = parse_multiplication_expression(context, iterator);
+        let next_expression = parse_multiplication_expression(scope, context, iterator);
         // 2 + 2 - 2 * 2
         let expr_code = &next_expression.code;
         let expr_name = &next_expression.name;
@@ -208,7 +224,7 @@ fn parse_expression<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) ->
     };
 }
 
-fn parse_term<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> Expression
+fn parse_term<'a, T>(scope: &mut Scope, context: &mut Context, iterator: &mut Peekable<T>) -> Expression
     where T: Iterator<Item=&'a Token> {
     match next_result(iterator) {
         Token::Ident(identifier) => {
@@ -223,9 +239,15 @@ fn parse_term<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> Expre
                     ir_code += &format!("%int {}\n", temp);
 
                     let mut function_call = format!("{}(", identifier);
+
+                    if !context.functions.contains(&identifier) {
+                        eprintln!("You attempted to call a function '{}' that doesn't exist", identifier);
+                        process::exit(1);
+                    }
+
                     iterator.next();
                     while !check_peek(iterator, Token::ClosingParentheses) {
-                        let term = parse_expression(context, iterator);
+                        let term = parse_expression(scope, context, iterator);
                         function_call += &format!("{}", term.name);
                         ir_code += &term.code;
                         if check_peek(iterator, Token::Comma) {
@@ -237,8 +259,17 @@ fn parse_term<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> Expre
                     function_call += ", )";
                     ir_code += &format!("%call {}, {}\n", temp, function_call);
                     println!("Doing ir code: {}", ir_code);
+                } else {
+                    if !scope.variables.contains(&identifier) {
+                        eprintln!("You attempted to access variable '{}' that doesn't exist", identifier);
+                        process::exit(1);
+                    }
                 }
             } else {
+                if !scope.variables.contains(&identifier) {
+                    eprintln!("You attempted to index an array variable '{}' that doesn't exist", identifier);
+                    process::exit(1);
+                }
                 temp = create_temp(context);
                 ir_code += &format!("%int {}\n", temp);
                 ir_code += &format!("%mov {}, [{} + {}]\n", temp, identifier, is_array.1);
@@ -262,6 +293,136 @@ fn parse_term<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> Expre
             process::exit(1);
         }
     }
+}
+
+fn parse_array_size<'a, T>(iterator: &mut Peekable<T>) -> (bool, i32)
+    where T: Iterator<Item=&'a Token> {
+    if check_peek(iterator, Token::OpeningBracket) { // array size!!!
+        iterator.next();
+        let size = match next_result(iterator) {
+            Token::Num(num) => {
+                num
+            },
+            _ => {
+                eprintln!("Expected integer size for array");
+                process::exit(1);
+            }
+        };
+        if !check_next(iterator, Token::ClosingBracket) {
+            eprintln!("Expected closing bracket after array size");
+            process::exit(1);
+        }
+        return (true, size);
+    }
+    return (false, -1);
+}
+
+fn parse<'a, T>(scope: Option<&mut Scope>, context: &mut Context, iterator: &mut Peekable<T>) -> String
+    where T: Iterator<Item=&'a Token> {
+    let mut ir_code = "".to_string();
+
+    match peek_result(iterator) {
+        Token::Func => {
+            iterator.next();
+            ir_code += &parse_function(context, iterator);
+            println!("Broke out of function");
+        }
+        Token::Int => {
+            iterator.next();
+            let is_array = parse_array_size(iterator);
+            let int_identifier = match next_result(iterator) {
+                Token::Ident(funcName) => funcName,
+                _ => {
+                    eprintln!("Expected identifier after int token");
+                    process::exit(1);
+                }
+            };
+
+            if is_array.0 && is_array.1 <= 0 {
+                eprintln!("Cannot create an array with size 0 or less");
+                process::exit(1);
+            }
+
+            if scope.as_ref().expect("Variables should be defined within a function").variables.contains(&int_identifier) {
+                eprintln!("The variable '{}' has already been declared", int_identifier);
+                process::exit(1);
+            }
+
+            if !check_next(iterator, Token::SemiColon) {
+                eprintln!("Expected semicolon after int variable declaration");
+                process::exit(1);
+            }
+            if is_array.0 {
+                ir_code += &format!("%int[] {}, {}\n", int_identifier, is_array.1);
+            } else {
+                ir_code += &format!("%int {}\n", int_identifier);
+            }
+
+            println!("Pushing {}", int_identifier);
+            // if scope.is_some() {
+                scope.expect("Variables should be defined within a function").variables.push(int_identifier.clone());
+            // }
+
+        }
+        Token::Ident(ident) => {
+            iterator.next();
+
+            let is_array = parse_array_size(iterator);
+
+            if !scope.as_ref().expect("Variables should be defined within a function").variables.contains(&ident) {
+                eprintln!("You attempted to access a variable '{}' that doesn't exist", ident);
+                process::exit(1);
+            }
+
+            if !check_next(iterator, Token::Assign) {
+                eprintln!("Expected assignment operator after identifier");
+                process::exit(1);
+            }
+            // if scope.clone().is_none() {
+            //     eprintln!("Identifier assignment should be done in a function scope");
+            //     process::exit(1);
+            // }
+            let expression = parse_expression(scope.expect("Variables should be defined within a function"), context, iterator);
+            if !check_next(iterator, Token::SemiColon) {
+                eprintln!("Expected semicolon after assignment");
+                process::exit(1);
+            }
+            ir_code += &expression.code;
+            if is_array.0 {
+                ir_code += &format!("%mov [{} + {}], {}\n", ident, is_array.1, expression.name);
+            } else {
+                ir_code += &format!("%mov {}, {}\n", ident, expression.name);
+            }
+        }
+        Token::Print => {
+            println!("Parsing print");
+            iterator.next();
+            if !check_next(iterator, Token::OpenParentheses) {
+                eprintln!("Expected opening parentheses after print token");
+                process::exit(1);
+            }
+            // if scope.is_none() {
+            //     eprintln!("Printing to stdout should be done in a function scope");
+            //     process::exit(1);
+            // }
+            let expression = parse_expression(scope.unwrap(), context, iterator);
+            if !check_next(iterator, Token::ClosingParentheses) {
+                eprintln!("Expected closing parentheses after print expression");
+                process::exit(1);
+            }
+            if !check_next(iterator, Token::SemiColon) {
+                eprintln!("Expected semicolon after print");
+                process::exit(1);
+            }
+            ir_code += &expression.code;
+            ir_code += &format!("%out {}\n", expression.name);
+        }
+        _ => {
+            iterator.next();
+        }
+    };
+
+    return ir_code;
 }
 
 fn peek_is_operator<'a, T>(iterator: &mut Peekable<T>) -> bool
@@ -310,116 +471,12 @@ fn check_peek<'a, T>(iterator: &mut Peekable<T>, checked_token: Token) -> bool
     return **token == checked_token;
 }
 
-fn parse_array_size<'a, T>(iterator: &mut Peekable<T>) -> (bool, i32)
-    where T: Iterator<Item=&'a Token> {
-    if check_peek(iterator, Token::OpeningBracket) { // array size!!!
-        iterator.next();
-        let size = match next_result(iterator) {
-            Token::Num(num) => {
-                if num <= 0 {
-                    // TODO: Throw semantic error
-                }
-                num
-            },
-            _ => {
-                eprintln!("Expected integer size for array");
-                process::exit(1);
-            }
-        };
-        if !check_next(iterator, Token::ClosingBracket) {
-            eprintln!("Expected closing bracket after array size");
-            process::exit(1);
-        }
-        return (true, size);
-    }
-    return (false, -1);
-}
-
-fn parse<'a, T>(context: &mut Context, iterator: &mut Peekable<T>) -> String
-    where T: Iterator<Item=&'a Token> {
-    let mut ir_code = "".to_string();
-
-    match peek_result(iterator) {
-        Token::Func => {
-            iterator.next();
-            ir_code += &parse_function(context, iterator);
-            println!("Broke out of function");
-        }
-        Token::Int => {
-            iterator.next();
-            let is_array = parse_array_size(iterator);
-            let int_identifier = match next_result(iterator) {
-                Token::Ident(funcName) => funcName,
-                _ => {
-                    eprintln!("Expected identifier after int token");
-                    process::exit(1);
-                }
-            };
-
-            if !check_next(iterator, Token::SemiColon) {
-                eprintln!("Expected semicolon after int variable declaration");
-                process::exit(1);
-            }
-            if is_array.0 {
-                ir_code += &format!("%int[] {}, {}\n", int_identifier, is_array.1);
-            } else {
-                ir_code += &format!("%int {}\n", int_identifier);
-            }
-        }
-        Token::Ident(ident) => {
-            iterator.next();
-
-            let is_array = parse_array_size(iterator);
-
-            if !check_next(iterator, Token::Assign) {
-                eprintln!("Expected assignment operator after identifier");
-                process::exit(1);
-            }
-            let expression = parse_expression(context, iterator);
-            if !check_next(iterator, Token::SemiColon) {
-                eprintln!("Expected semicolon after assignment");
-                process::exit(1);
-            }
-            ir_code += &expression.code;
-            if is_array.0 {
-                ir_code += &format!("%mov [{} + {}], {}\n", ident, is_array.1, expression.name);
-            } else {
-                ir_code += &format!("%mov {}, {}\n", ident, expression.name);
-            }
-        }
-        Token::Print => {
-            println!("Parsing print");
-            iterator.next();
-            if !check_next(iterator, Token::OpenParentheses) {
-                eprintln!("Expected opening parentheses after print token");
-                process::exit(1);
-            }
-            let expression = parse_expression(context, iterator);
-            if !check_next(iterator, Token::ClosingParentheses) {
-                eprintln!("Expected closing parentheses after print expression");
-                process::exit(1);
-            }
-            if !check_next(iterator, Token::SemiColon) {
-                eprintln!("Expected semicolon after print");
-                process::exit(1);
-            }
-            ir_code += &expression.code;
-            ir_code += &format!("%out {}\n", expression.name);
-        }
-        _ => {
-            iterator.next();
-        }
-    };
-
-    return ir_code;
-}
-
-pub unsafe fn parse_tokens(context: &mut Context, tokens: &Vec<Token>) -> String {
+pub fn parse_tokens(context: &mut Context, tokens: &Vec<Token>) -> String {
     let mut ir_code = "".to_string();
     let mut iter = tokens.iter().peekable();
     while iter.peek().is_some() {
         println!("Current IR CODE: \n{}", ir_code);
-        let result = &format!("{}", parse(context, &mut iter));
+        let result = &format!("{}", parse(None, context, &mut iter));
         ir_code += &format!("{}", result);
     }
     return ir_code.clone();
