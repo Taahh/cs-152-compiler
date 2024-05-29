@@ -8,6 +8,16 @@ mod token;
 mod parser;
 mod interpreter;
 
+struct Context {
+    temp_val: i64
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Expression {
+    code: String,
+    name: String
+}
+
 fn main() {
     // get commandline arguments.
     let args: Vec<String> = env::args().collect();
@@ -67,8 +77,12 @@ fn main() {
 
     println!("Tokens: {:?}", tokens);
 
+    let mut context = Context {
+        temp_val: 1
+    };
+
     unsafe {
-        let code = parse_tokens(&tokens);
+        let code = parse_tokens(&mut context, &tokens);
         println!("{}", code);
         interpreter::execute_ir(&code);
     }
