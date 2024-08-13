@@ -33,4 +33,6 @@ func main() {
   b = 7;
   c = (a + 2) * b;
   print(c);
+
+  print((1 + 2 * 3) * 4 + 5);
 }

@@ -1,5 +1,6 @@
 use std::fmt::format;
 use std::iter::Peekable;
+use std::num::ParseIntError;
 use std::process;
 
 use crate::{Context, Expression, Scope};
@@ -234,7 +235,17 @@ fn parse_expression<'a, T>(scope: &mut Scope, context: &mut Context, iterator: &
             }
         } else { // Meaning we've found a multiplicative term
             ir_code += expr_code; // Add the multiplication to the IR CODE
-            ir_code += &format!("{} {}, {}, {}\n", operation, final_temp, final_temp, expr_name);
+            match final_temp.parse::<i32>() {
+                Ok(_) => {
+                    let original_temp = final_temp;
+                    final_temp = create_temp(context);
+                    ir_code += &format!("%int {}\n", final_temp);
+                    ir_code += &format!("{} {}, {}, {}\n", operation, final_temp, original_temp, expr_name);
+                }
+                Err(_) => {
+                    ir_code += &format!("{} {}, {}, {}\n", operation, final_temp, final_temp, expr_name);
+                }
+            }
         }
     }
 
